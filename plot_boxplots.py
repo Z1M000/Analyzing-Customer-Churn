@@ -72,10 +72,10 @@ for column in features:
             )
         )
 
-    # ===== 给右侧留空间 =====
+    # leave space for summary card
     ax.set_xlim(-0.5, 2.2)
 
-    # ===== 放 summary（右侧卡片）=====
+    # summary card
     ax.text(
         1.55, 0.8, summaries[0][1],
         transform=ax.get_xaxis_transform(),
@@ -102,7 +102,7 @@ for column in features:
         )
     )
 
-    # ===== 美化 =====
+    # make it look nicer
     plt.title(f"{column} vs Churn", fontsize=14, fontweight="bold", color="#000000", pad=12)
     plt.xlabel("Churn", fontsize=11, color="#000000")
     plt.ylabel(column, fontsize=11, color="#000000")
@@ -111,8 +111,8 @@ for column in features:
     sns.despine()
     plt.tight_layout()
 
-    # 保存
+    # save
     plt.savefig(f"Boxplots/{column}_vs_Churn_boxplot.png", dpi=300, bbox_inches="tight")
     plt.close()
 
-print("所有图表已保存至 Boxplots/ 文件夹")
+print("all boxplots saved in Boxplots/ folder")
