@@ -49,7 +49,7 @@ for column in features:
 
     ax.legend(loc="upper left", title="Churn", fontsize=9, title_fontsize=9)
 
-    # ===== 计算 five-number summary =====
+    # compute five-number summary
     grouped = clean.groupby("Churn")[column]
     summaries = []
 
