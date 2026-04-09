@@ -1,0 +1,157 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.decomposition import PCA
+
+# --------------------------------------------------
+# 1. Load cleaned dataset
+# --------------------------------------------------
+# Assuming the file is named cleaned_dataset_new.csv
+df = pd.read_csv("cleaned_dataset_new.csv")
+
+# We removed errors='coerce' to ensure we catch any data type issues
+df = df.apply(pd.to_numeric)
+
+print("Dataset shape:", df.shape)
+print("Columns:", df.columns.tolist())
+
+# --------------------------------------------------
+# 2. Split customers into churn and non-churn groups
+# --------------------------------------------------
+churn_df = df[df["Churn"] == 1].copy()
+nonchurn_df = df[df["Churn"] == 0].copy()
+
+# --------------------------------------------------
+# 3. Drop churn column for clustering
+# --------------------------------------------------
+feature_cols = [col for col in df.columns if col != "Churn"]
+
+X_churn = churn_df[feature_cols].copy()
+X_nonchurn = nonchurn_df[feature_cols].copy()
+
+# --------------------------------------------------
+# 4. Helper function: evaluate candidate k values
+# --------------------------------------------------
+def evaluate_k(X, group_name, k_min=2, k_max=10, random_state=42):
+    X_values = X.to_numpy()
+    
+    k_values = []
+    inertias = []
+    silhouettes = []
+
+    for k in range(k_min, k_max + 1):
+        # Explicitly using k-means++ for better initialization
+        km = KMeans(n_clusters=k, init='k-means++', random_state=random_state, n_init=10)
+        labels = km.fit_predict(X_values)
+
+        k_values.append(k)
+        inertias.append(km.inertia_)
+        silhouettes.append(silhouette_score(X_values, labels))
+
+    metrics_df = pd.DataFrame({"k": k_values, "inertia": inertias, "silhouette": silhouettes})
+    suggested_k = metrics_df.loc[metrics_df["silhouette"].idxmax(), "k"]
+
+    # Prettier Plotting
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    axes[0].plot(metrics_df["k"], metrics_df["inertia"], marker="o", color='#2C3E50', linewidth=2)
+    axes[0].axvline(x=suggested_k, color='#27AE60', linestyle='--', linewidth=2, label=f'Optimal k={suggested_k}')
+    axes[0].set_title(f"Elbow Method - {group_name}")
+    axes[0].set_xlabel("Number of clusters (k)")
+    axes[0].set_ylabel("Inertia")
+    axes[0].grid(True, linestyle='--', alpha=0.6)
+    axes[0].legend()
+
+    axes[1].plot(metrics_df["k"], metrics_df["silhouette"], marker="o", color='#E74C3C', linewidth=2)
+    axes[1].axvline(x=suggested_k, color='#27AE60', linestyle='--', linewidth=2, label=f'Optimal k={suggested_k}')
+    axes[1].set_title(f"Silhouette Score - {group_name}")
+    axes[1].set_xlabel("Number of clusters (k)")
+    axes[1].set_ylabel("Silhouette score")
+    axes[1].grid(True, linestyle='--', alpha=0.6)
+    axes[1].legend()
+
+    plt.tight_layout()
+    plt.savefig(f'{group_name}_elbow_silhouette.png', dpi=300)
+    plt.close()
+
+    return metrics_df, suggested_k
+
+# --------------------------------------------------
+# 5. Helper function: run clustering
+# --------------------------------------------------
+def cluster_group(X, original_df, group_name, k, random_state=42):
+    model = KMeans(n_clusters=k, init='k-means++', random_state=random_state, n_init=10)
+    cluster_labels = model.fit_predict(X)
+
+    result_df = original_df.copy()
+    result_df["Cluster"] = cluster_labels
+    return result_df, model
+
+# --------------------------------------------------
+# 6. Prettier 2D and 3D PCA Visualizations
+# --------------------------------------------------
+def plot_pca_clusters(X, labels, group_name):
+    pca = PCA(n_components=2, random_state=42)
+    X_2d = pca.fit_transform(X)
+
+    plt.figure(figsize=(8, 6))
+    scatter = plt.scatter(X_2d[:, 0], X_2d[:, 1], c=labels, cmap="Paired", 
+                          s=50, alpha=0.8, edgecolors='w', linewidth=0.5)
+    
+    plt.title(f"2D PCA View of Clusters - {group_name}", fontsize=14)
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
+    plt.colorbar(scatter, label="Cluster")
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f'{group_name}_pca_clusters_2d.png', dpi=300)
+    plt.close()
+
+def plot_pca_clusters_3d(X, labels, group_name):
+    pca = PCA(n_components=3, random_state=42)
+    X_3d = pca.fit_transform(X)
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    scatter = ax.scatter(X_3d[:, 0], X_3d[:, 1], X_3d[:, 2], 
+                         c=labels, cmap="Paired", s=40, alpha=0.8, 
+                         edgecolors='w', linewidth=0.5)
+    
+    ax.set_title(f"3D PCA View of Clusters - {group_name}", fontsize=14, pad=15)
+    ax.set_xlabel("Principal Component 1")
+    ax.set_ylabel("Principal Component 2")
+    ax.set_zlabel("Principal Component 3")
+    
+    # Adjust viewing angle for better 3D depth
+    ax.view_init(elev=20, azim=45)
+    
+    fig.colorbar(scatter, ax=ax, shrink=0.5, aspect=10, label="Cluster")
+    plt.tight_layout()
+    plt.savefig(f'{group_name}_pca_clusters_3d.png', dpi=300)
+    plt.close()
+
+# --------------------------------------------------
+# 7. Execute Workflow
+# --------------------------------------------------
+churn_metrics, churn_k = evaluate_k(X_churn, "Churn Group", k_min=2, k_max=8)
+nonchurn_metrics, nonchurn_k = evaluate_k(X_nonchurn, "Non-Churn Group", k_min=2, k_max=8)
+
+# Assuming manual override based on previous findings
+churn_k = 3
+nonchurn_k = 2
+
+churn_clustered_df, churn_model = cluster_group(X_churn, churn_df, "Churn Group", k=churn_k)
+nonchurn_clustered_df, nonchurn_model = cluster_group(X_nonchurn, nonchurn_df, "Non-Churn Group", k=nonchurn_k)
+
+plot_pca_clusters(X_churn, churn_clustered_df["Cluster"], "Churn Group")
+plot_pca_clusters(X_nonchurn, nonchurn_clustered_df["Cluster"], "Non-Churn Group")
+
+plot_pca_clusters_3d(X_churn, churn_clustered_df["Cluster"], "Churn Group")
+plot_pca_clusters_3d(X_nonchurn, nonchurn_clustered_df["Cluster"], "Non-Churn Group")
+
+churn_clustered_df.to_csv("churn_clustered_results.csv", index=False)
+nonchurn_clustered_df.to_csv("nonchurn_clustered_results.csv", index=False)
