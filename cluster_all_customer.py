@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
@@ -128,6 +129,8 @@ cluster_means = clustered_df.groupby("Cluster")[feature_cols].mean()
 cluster_zscores = (cluster_means - overall_mean) / overall_std
 
 print("\nCluster means in standardized form:")
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
 print(cluster_zscores.round(2))
 
 # --------------------------------------------------
@@ -232,6 +235,44 @@ plt.savefig("all_customers_pca_3d.png", dpi=300, bbox_inches="tight")
 plt.close()
 
 # --------------------------------------------------
+# 8b. PCA Loadings Heatmap (add after existing PCA section)
+# --------------------------------------------------
+# --------------------------------------------------
+# PCA Loadings Heatmap — 2D only (PC1 & PC2)
+# --------------------------------------------------
+import seaborn as sns
+
+pca_for_heatmap = PCA(n_components=2, random_state=42)
+pca_for_heatmap.fit(X)
+
+loadings_df = pd.DataFrame(
+    pca_for_heatmap.components_,
+    columns=feature_cols,
+    index=[
+        f"PC1 ({pca_for_heatmap.explained_variance_ratio_[0]*100:.1f}%)",
+        f"PC2 ({pca_for_heatmap.explained_variance_ratio_[1]*100:.1f}%)"
+    ]
+)
+
+fig, ax = plt.subplots(figsize=(11, 3.5))
+sns.heatmap(
+    loadings_df,
+    annot=True, fmt=".2f",
+    cmap="RdBu_r", center=0,
+    linewidths=0.5, ax=ax,
+    annot_kws={"size": 12}
+)
+ax.set_title("PCA Feature Loadings — 2D PCA (Contribution of Each Feature to Each Component)",
+             fontsize=13, fontweight="bold", pad=12)
+ax.set_xlabel("Features", fontsize=11)
+ax.set_ylabel("Principal Components", fontsize=11)
+ax.tick_params(axis='x', labelrotation=30, labelsize=10)
+ax.tick_params(axis='y', labelrotation=0, labelsize=11)
+plt.tight_layout()
+plt.savefig("pca_2d_loadings_heatmap.png", dpi=200, bbox_inches="tight")
+plt.close()
+
+# --------------------------------------------------
 # 9. Save results
 # --------------------------------------------------
 clustered_df.to_csv("all_customers_clustered_results.csv", index=False)
@@ -243,3 +284,69 @@ print("- all_customers_pca_2d.png")
 print("- all_customers_pca_3d.png")
 print("- all_customers_clustered_results.csv")
 print("- cluster_churn_summary.csv")
+
+# --------------------------------------------------
+# Z-Score Table Image
+# --------------------------------------------------
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
+feature_labels = {
+    "AccountWeeks": "Account Weeks",
+    "ContractRenewal": "Contract Renewal",
+    "DataUsage": "Data Usage",
+    "CustServCalls": "Cust. Service Calls",
+    "DayMins": "Day Minutes",
+    "DayCalls": "Day Calls",
+    "MonthlyCharge": "Monthly Charge",
+    "OverageFee": "Overage Fee",
+    "RoamMins": "Roaming Minutes"
+}
+
+rows = []
+for feat in feature_cols:
+    z0 = cluster_zscores.loc[0, feat]
+    z1 = cluster_zscores.loc[1, feat]
+    rows.append([feature_labels.get(feat, feat), f"{z0:+.3f}", f"{z1:+.3f}"])
+
+fig, ax = plt.subplots(figsize=(10.5, 6.3))
+ax.axis("off")
+
+col_labels = ["Feature", "Cluster 0\n(High-Value Users)\nz-score", "Cluster 1\n(Standard Users)\nz-score"]
+table = ax.table(
+    cellText=rows,
+    colLabels=col_labels,
+    cellLoc="center",
+    colWidths=[0.34, 0.33, 0.33],
+    bbox=[0.0, 0.13, 1.0, 0.73]
+)
+table.auto_set_font_size(False)
+table.set_fontsize(10)
+table.scale(1.0, 1.85)
+
+for j in range(3):
+    table[0, j].set_facecolor("#2C3E50")
+    table[0, j].set_text_props(color="white", fontweight="bold", va="center")
+    table[0, j].set_height(table[0, j].get_height() * 1.45)
+    table[0, j].PAD = 0.02
+
+for i, (feat, z0_str, z1_str) in enumerate(rows, start=1):
+    z0 = float(z0_str); z1 = float(z1_str)
+    table[i, 0].set_facecolor("#F8F9FA" if i % 2 != 0 else "#ECEFF1")
+    table[i, 0].set_text_props(ha="left", va="center")
+    for col_idx, z_val in [(1, z0), (2, z1)]:
+        if z_val > 0.5:   color = "#C8E6C9"
+        elif z_val < -0.5: color = "#FFCDD2"
+        else:              color = "#FFF9C4"
+        table[i, col_idx].set_facecolor(color)
+
+green_patch = mpatches.Patch(color="#C8E6C9", label="Above average (z > +0.5)")
+yellow_patch = mpatches.Patch(color="#FFF9C4", label="Near average")
+red_patch = mpatches.Patch(color="#FFCDD2", label="Below average (z < −0.5)")
+ax.legend(handles=[green_patch, yellow_patch, red_patch],
+          loc="lower center", bbox_to_anchor=(0.5, -0.07), ncol=3, fontsize=9)
+
+ax.set_title("Cluster Feature Z-Score Comparison", fontsize=13, fontweight="bold", pad=20)
+fig.subplots_adjust(top=0.90, bottom=0.10)
+plt.savefig("cluster_zscore_table.png", dpi=200, bbox_inches="tight", pad_inches=0.3)
+plt.close()
