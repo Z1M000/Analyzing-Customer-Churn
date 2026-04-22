@@ -29,11 +29,14 @@ os.makedirs("Histograms", exist_ok=True)
 palette = ["#A8DFF3", "#F4BABF"]
 churn_labels = sorted(clean["Churn"].unique())
 
-for column in features:
+
+def draw_histogram(dataframe, column, output_name, title_suffix="", x_limits=None):
     fig, ax = plt.subplots(figsize=(9, 6))
 
     for i, churn_value in enumerate(churn_labels):
-        subset = clean[clean["Churn"] == churn_value][column]
+        subset = dataframe[dataframe["Churn"] == churn_value][column]
+        if subset.empty:
+            continue
         weights = (100 / len(subset)) * np.ones(len(subset))  # converts to percentage
         ax.hist(
             subset,
@@ -48,11 +51,12 @@ for column in features:
 
     ax.set_ylabel("Percentage (%)", fontsize=11, color="#000000")
 
-    # five-number summary
     summaries = []
-    grouped = clean.groupby("Churn")[column]
+    grouped = dataframe.groupby("Churn")[column]
 
     for churn_value, group in grouped:
+        if group.empty:
+            continue
         summaries.append(
             (
                 churn_value,
@@ -65,44 +69,68 @@ for column in features:
             )
         )
 
-    # summary cards
-    ax.text(
-        0.75, 0.97, summaries[0][1],
-        transform=ax.transAxes,
-        fontsize=9,
-        verticalalignment="top",
-        bbox=dict(
-            facecolor="#FFFFFF",
-            edgecolor="#EBEBEB",
-            alpha=1.0,
-            boxstyle="round,pad=0.4"
+    if len(summaries) > 0:
+        ax.text(
+            0.75, 0.97, summaries[0][1],
+            transform=ax.transAxes,
+            fontsize=9,
+            verticalalignment="top",
+            bbox=dict(
+                facecolor="#FFFFFF",
+                edgecolor="#EBEBEB",
+                alpha=1.0,
+                boxstyle="round,pad=0.4"
+            )
         )
-    )
 
-    ax.text(
-        0.88, 0.97, summaries[1][1],
-        transform=ax.transAxes,
-        fontsize=9,
-        verticalalignment="top",
-        bbox=dict(
-            facecolor="#FFFFFF",
-            edgecolor="#EBEBEB",
-            alpha=1.0,
-            boxstyle="round,pad=0.4"
+    if len(summaries) > 1:
+        ax.text(
+            0.88, 0.97, summaries[1][1],
+            transform=ax.transAxes,
+            fontsize=9,
+            verticalalignment="top",
+            bbox=dict(
+                facecolor="#FFFFFF",
+                edgecolor="#EBEBEB",
+                alpha=1.0,
+                boxstyle="round,pad=0.4"
+            )
         )
-    )
+
+    if x_limits is not None:
+        ax.set_xlim(*x_limits)
 
     ax.legend(loc="upper left", title="Churn", fontsize=9, title_fontsize=9)
-
-    plt.title(f"{column} vs Churn", fontsize=14, fontweight="bold", color="#000000", pad=12)
+    plt.title(f"{column} vs Churn{title_suffix}", fontsize=14, fontweight="bold", color="#000000", pad=12)
     plt.xlabel(column, fontsize=11, color="#000000")
     plt.ylabel("Percentage (%)", fontsize=11, color="#000000")
     ax.tick_params(colors="#000000", labelsize=10)
 
     sns.despine()
     plt.tight_layout()
-
-    plt.savefig(f"Histograms/{column}_vs_Churn_histogram.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"Histograms/{output_name}", dpi=300, bbox_inches="tight")
     plt.close()
+
+for column in features:
+    if column == "DataUsage":
+        draw_histogram(
+            clean[clean[column] <= 1],
+            column,
+            "DataUsage_0_to_1_vs_Churn_histogram.png",
+            title_suffix=" (0 to 1)",
+            x_limits=(0, 1),
+        )
+        draw_histogram(
+            clean[clean[column] >= 1],
+            column,
+            "DataUsage_1_plus_vs_Churn_histogram.png",
+            title_suffix=" (1+)",
+        )
+    else:
+        draw_histogram(
+            clean,
+            column,
+            f"{column}_vs_Churn_histogram.png",
+        )
 
 print("all histograms saved in Histograms/ folder")

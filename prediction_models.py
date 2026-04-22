@@ -22,8 +22,16 @@ from sklearn.tree import DecisionTreeClassifier
 DATA_PATH = Path("cleaned_dataset.csv")
 TARGET_COLUMN = "Churn"
 RANDOM_STATE = 42
-ROC_FIGURE_PATH = Path("roc_curves.png")
-CONFUSION_MATRIX_PATH = Path("confusion_matrices.png")
+ROC_FIGURE_PATH = Path("Figures/roc_curves.png")
+CONFUSION_MATRIX_PATH = Path("Figures/confusion_matrices.png")
+METRIC_TABLE_PATH = Path("Figures/model_comparison_table.png")
+DEFAULT_METRIC_TABLE_PATH = Path("Figures/model_comparison_table_default_threshold.png")
+TREE_IMPORTANCE_PATH = Path("Figures/decision_tree_feature_importance.png")
+FOREST_IMPORTANCE_PATH = Path("Figures/random_forest_feature_importance.png")
+LOGISTIC_COEFFICIENT_PATH = Path("Figures/logistic_regression_coefficients.png")
+LASSO_COEFFICIENT_PATH = Path("Figures/lasso_logistic_regression_coefficients.png")
+PALETTE = ["#A8DFF3", "#F4BABF"]
+ROC_PALETTE = ["#1F77B4", "#E15759", "#2CA02C", "#9467BD", "#FF9F1C"]
 
 
 def load_dataset(path: Path, target_column: str) -> pd.DataFrame:
@@ -104,6 +112,94 @@ def print_metric_table(results):
     return results_df
 
 
+def plot_metric_table(results_df, title, output_path):
+    """Save a booktabs-style summary table as an image."""
+    display_columns = [
+        "Model",
+        "Threshold",
+        "Accuracy",
+        "Precision",
+        "Recall",
+        "F1-score",
+        "ROC-AUC",
+    ]
+    formatted_df = results_df[display_columns].copy()
+    metric_columns = display_columns[1:]
+    for column in metric_columns:
+        formatted_df[column] = formatted_df[column].map(lambda value: f"{value:.4f}")
+
+    row_count = len(formatted_df)
+    figure_height = 1.35 + row_count * 0.42
+    figure, axis = plt.subplots(figsize=(8.4, figure_height))
+    axis.axis("off")
+
+    table = axis.table(
+        cellText=formatted_df.values,
+        colLabels=formatted_df.columns,
+        cellLoc="center",
+        colLoc="center",
+        colWidths=[0.28, 0.105, 0.105, 0.105, 0.095, 0.105, 0.105],
+        bbox=[0.02, 0.08, 0.96, 0.72],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1, 1.12)
+
+    for (row, column), cell in table.get_celld().items():
+        cell.set_edgecolor("white")
+        cell.set_linewidth(0)
+        cell.set_facecolor("white")
+        if row == 0:
+            cell.set_text_props(weight="bold", color="black")
+        else:
+            if column == 0:
+                cell.set_text_props(weight="semibold", color="black")
+
+    # Draw booktabs-style horizontal rules only.
+    x0, y0, width, height = 0.02, 0.08, 0.96, 0.72
+    row_height = height / (row_count + 1)
+    axis.hlines(
+        y=y0 + height,
+        xmin=x0,
+        xmax=x0 + width,
+        colors="black",
+        linewidth=1.5,
+        transform=axis.transAxes,
+    )
+    axis.hlines(
+        y=y0 + height - row_height,
+        xmin=x0,
+        xmax=x0 + width,
+        colors="black",
+        linewidth=0.8,
+        transform=axis.transAxes,
+    )
+    axis.hlines(
+        y=y0,
+        xmin=x0,
+        xmax=x0 + width,
+        colors="black",
+        linewidth=1.5,
+        transform=axis.transAxes,
+    )
+
+    axis.text(
+        0.02,
+        0.9,
+        title,
+        transform=axis.transAxes,
+        fontsize=13,
+        fontweight="bold",
+        ha="left",
+        va="bottom",
+        color="black",
+    )
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close()
+
+
 def print_threshold_comparison(model_name, best_threshold):
     """Explain whether threshold tuning improved over the default cutoff."""
     if np.isclose(best_threshold, 0.5):
@@ -158,6 +254,100 @@ def print_feature_importance(importances, feature_names, title):
     return importance_df
 
 
+def plot_feature_importance(importance_df, title, output_path, top_n=None):
+    """Save a horizontal bar chart for feature importance rankings."""
+    plot_df = importance_df.copy()
+    if top_n is not None:
+        plot_df = plot_df.head(top_n)
+
+    plot_df = plot_df.sort_values(by="Importance", ascending=True)
+    figure_height = max(4.5, 0.45 * len(plot_df) + 1.2)
+    figure, axis = plt.subplots(figsize=(7, figure_height))
+
+    axis.barh(plot_df["Feature"], plot_df["Importance"], color=PALETTE[0])
+    axis.set_title(title)
+    axis.set_xlabel("Importance")
+    axis.set_ylabel("Feature")
+    axis.grid(axis="x", alpha=0.25)
+    axis.set_axisbelow(True)
+
+    x_max = plot_df["Importance"].max() if not plot_df.empty else 0
+    x_offset = max(x_max * 0.02, 0.001)
+    axis.set_xlim(0, x_max + x_offset * 8)
+
+    for _, row in plot_df.iterrows():
+        axis.text(
+            row["Importance"] + x_offset,
+            row["Feature"],
+            f"{row['Importance']:.4f}",
+            va="center",
+            ha="left",
+            fontsize=10,
+            color="black",
+        )
+
+    for spine in ["top", "right"]:
+        axis.spines[spine].set_visible(False)
+
+    figure.subplots_adjust(left=0.34, right=0.97)
+    plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close()
+
+
+def plot_coefficients(coefficients_df, title, output_path, top_n=None):
+    """Save a horizontal bar chart for signed model coefficients."""
+    plot_df = coefficients_df.copy()
+    if top_n is not None:
+        plot_df = plot_df.head(top_n)
+
+    plot_df = plot_df.sort_values(by="Coefficient", ascending=True)
+    colors = [PALETTE[1] if value < 0 else PALETTE[0] for value in plot_df["Coefficient"]]
+    figure_height = max(4.5, 0.5 * len(plot_df) + 1.2)
+    figure, axis = plt.subplots(figsize=(6, figure_height))
+
+    axis.barh(plot_df["Feature"], plot_df["Coefficient"], color=colors)
+    axis.axvline(0, color="black", linewidth=0.8)
+    axis.set_title(title)
+    axis.set_xlabel("Coefficient")
+    axis.set_ylabel("Feature")
+    axis.grid(axis="x", alpha=0.25)
+    axis.set_axisbelow(True)
+
+    min_value = plot_df["Coefficient"].min() if not plot_df.empty else 0
+    max_value = plot_df["Coefficient"].max() if not plot_df.empty else 0
+    span = max(abs(min_value), abs(max_value))
+    x_offset = max(span * 0.03, 0.01)
+    left_padding = x_offset * 16
+    right_padding = x_offset * 10
+    axis.set_xlim(min_value - left_padding, max_value + right_padding)
+
+    for _, row in plot_df.iterrows():
+        value = row["Coefficient"]
+        if value >= 0:
+            x_position = value + x_offset
+            alignment = "left"
+        else:
+            x_position = value - x_offset
+            alignment = "right"
+
+        axis.text(
+            x_position,
+            row["Feature"],
+            f"{value:.4f}",
+            va="center",
+            ha=alignment,
+            fontsize=10,
+            color="black",
+        )
+
+    for spine in ["top", "right"]:
+        axis.spines[spine].set_visible(False)
+
+    figure.subplots_adjust(left=0.34, right=0.97)
+    plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close()
+
+
 def print_confusion_matrices(results):
     print("\nConfusion Matrices")
     for result in results:
@@ -169,21 +359,22 @@ def print_confusion_matrices(results):
 
 def plot_roc_curves(results, y_test):
     plt.figure(figsize=(10, 7))
-    for result in results:
+    for index, result in enumerate(results):
         fpr, tpr, _ = roc_curve(y_test, result["Scores"])
         plt.plot(
             fpr,
             tpr,
-            linewidth=2,
-            label=f"{result['Model']} (AUC={result['ROC-AUC']:.3f})",
+            color=ROC_PALETTE[index % len(ROC_PALETTE)],
+            linewidth=2.6,
+            label=f"{result['Model']} (AUC={result['ROC-AUC']:.4f})",
         )
 
-    plt.plot([0, 1], [0, 1], linestyle="--", color="gray", linewidth=1)
+    plt.plot([0, 1], [0, 1], linestyle="--", color="#9E9E9E", linewidth=1.2)
     plt.title("ROC Curves for Churn Prediction Models")
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-    plt.legend(loc="lower right")
-    plt.grid(alpha=0.3)
+    plt.legend(loc="lower right", frameon=True, facecolor="white", edgecolor="#D9D9D9")
+    plt.grid(alpha=0.25, linestyle=":")
     plt.tight_layout()
     plt.savefig(ROC_FIGURE_PATH, dpi=300)
     plt.close()
@@ -280,10 +471,16 @@ def main():
             logistic_threshold,
         )
     )
-    print_coefficients(
+    logistic_coefficients_df = print_coefficients(
         logistic_model,
         feature_names,
         "Logistic Regression Coefficients",
+    )
+    plot_coefficients(
+        logistic_coefficients_df,
+        "Top 5 Logistic Regression Coefficients",
+        LOGISTIC_COEFFICIENT_PATH,
+        top_n=5,
     )
 
     lasso_model = LogisticRegressionCV(
@@ -318,7 +515,16 @@ def main():
         )
     )
     print(f"\nBest inverse regularization strength (C) for LASSO: {lasso_model.C_[0]:.6f}")
-    print_selected_features(lasso_model, feature_names)
+    lasso_selected_df = print_selected_features(lasso_model, feature_names)
+    if not lasso_selected_df.empty:
+        plot_coefficients(
+            lasso_selected_df.rename("Coefficient").reset_index().rename(
+                columns={"index": "Feature"}
+            ),
+            "Top 5 LASSO Logistic Regression Coefficients",
+            LASSO_COEFFICIENT_PATH,
+            top_n=5,
+        )
 
     tree_grid = GridSearchCV(
         estimator=DecisionTreeClassifier(
@@ -351,10 +557,16 @@ def main():
         evaluate_model("Decision Tree", best_tree, x_test, y_test, tree_threshold)
     )
     print(f"\nBest Decision Tree parameters: {tree_grid.best_params_}")
-    print_feature_importance(
+    tree_importance_df = print_feature_importance(
         best_tree.feature_importances_,
         feature_names,
         "Decision Tree Feature Importance",
+    )
+    plot_feature_importance(
+        tree_importance_df,
+        "Decision Tree Feature Importance",
+        TREE_IMPORTANCE_PATH,
+        top_n=5,
     )
 
     forest_grid = GridSearchCV(
@@ -388,10 +600,16 @@ def main():
         evaluate_model("Random Forest", best_forest, x_test, y_test, forest_threshold)
     )
     print(f"\nBest Random Forest parameters: {forest_grid.best_params_}")
-    print_feature_importance(
+    forest_importance_df = print_feature_importance(
         best_forest.feature_importances_,
         feature_names,
         "Random Forest Feature Importance",
+    )
+    plot_feature_importance(
+        forest_importance_df,
+        "Random Forest Feature Importance",
+        FOREST_IMPORTANCE_PATH,
+        top_n=5,
     )
 
     try:
@@ -452,12 +670,32 @@ def main():
     print(f"\nBest SVM parameters: {svm_grid.best_params_}")
 
     print("\nDefault Threshold Results (test set, threshold = 0.5000)")
-    print_metric_table(default_threshold_results)
+    default_ranked_results = print_metric_table(default_threshold_results)
+    plot_metric_table(
+        default_ranked_results,
+        "Model Comparison at Default Threshold = 0.5000",
+        DEFAULT_METRIC_TABLE_PATH,
+    )
     print("\nTrain-Optimized Threshold Results (evaluated on test set)")
     ranked_results = print_metric_table(results)
+    plot_metric_table(
+        ranked_results,
+        "Model Comparison (sorted by ROC-AUC, then F1-score)",
+        METRIC_TABLE_PATH,
+    )
     print_confusion_matrices(results)
     plot_roc_curves(results, y_test)
     plot_confusion_matrices(results)
+    print(
+        f"Default-threshold model comparison table saved to: "
+        f"{DEFAULT_METRIC_TABLE_PATH.resolve()}"
+    )
+    print(f"Model comparison table saved to: {METRIC_TABLE_PATH.resolve()}")
+    print(f"Logistic Regression coefficients saved to: {LOGISTIC_COEFFICIENT_PATH.resolve()}")
+    if not lasso_selected_df.empty:
+        print(f"LASSO coefficients saved to: {LASSO_COEFFICIENT_PATH.resolve()}")
+    print(f"Decision Tree feature importance saved to: {TREE_IMPORTANCE_PATH.resolve()}")
+    print(f"Random Forest feature importance saved to: {FOREST_IMPORTANCE_PATH.resolve()}")
     print(f"\nROC curves saved to: {ROC_FIGURE_PATH.resolve()}")
     print(f"Confusion matrices saved to: {CONFUSION_MATRIX_PATH.resolve()}")
     best_by_roc_auc = ranked_results.iloc[0]
