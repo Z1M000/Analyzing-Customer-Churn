@@ -4,7 +4,7 @@ This project analyzes a telecom customer churn dataset from Kaggle to understand
 
 ## Project Highlights
 
-1. Conducted **exploratory data analysis (EDA)** to identify features strongly associated with customer churn, including customer service calls and data usage.
+1. Conducted **exploratory data analysis** to identify features strongly associated with customer churn, including customer service calls and data usage.
 2. Applied **clustering techniques** to segment customers and identify distinct customer personas.
 3. Developed and evaluated **five classification models** to predict customer churn and validate key predictive features.
 4. Generated **actionable customer retention recommendations** based on analytical findings.
